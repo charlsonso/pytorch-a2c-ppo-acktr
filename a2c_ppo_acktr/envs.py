@@ -4,6 +4,8 @@ import gym
 import numpy as np
 import torch
 from gym.spaces.box import Box
+import retro
+import cv2
 
 from baselines import bench
 from baselines.common.atari_wrappers import make_atari, wrap_deepmind
@@ -31,37 +33,16 @@ except ImportError:
 
 def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
     def _thunk():
-        if env_id.startswith("dm"):
-            _, domain, task = env_id.split('.')
-            env = dm_control2gym.make(domain_name=domain, task_name=task)
-        else:
-            env = gym.make(env_id)
-
-        is_atari = hasattr(gym.envs, 'atari') and isinstance(
-            env.unwrapped, gym.envs.atari.atari_env.AtariEnv)
-        if is_atari:
-            env = make_atari(env_id)
-
+        env = retro.make(game='RoadFighter-Nes', state='RoadFighter.Level2')
         env.seed(seed + rank)
-
-        obs_shape = env.observation_space.shape
-
-        if add_timestep and len(
-                obs_shape) == 1 and str(env).find('TimeLimit') > -1:
-            env = AddTimestep(env)
 
         if log_dir is not None:
             env = bench.Monitor(env, os.path.join(log_dir, str(rank)),
                                 allow_early_resets=allow_early_resets)
 
-        if is_atari:
-            if len(env.observation_space.shape) == 3:
-                env = wrap_deepmind(env)
-        elif len(env.observation_space.shape) == 3:
-            raise NotImplementedError("CNN models work only for atari,\n"
-                "please use a custom wrapper for a custom pixel input env.\n"
-                "See wrap_deepmind for an example.")
-        
+        env = AtariRescale42x42(env)
+        env = NormalizedEnv(env)
+
         # If the input has shape (W,H,3), wrap for PyTorch convolutions
         obs_shape = env.observation_space.shape
         if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
@@ -216,3 +197,49 @@ class VecPyTorchFrameStack(VecEnvWrapper):
 
     def close(self):
         self.venv.close()
+
+def _process_frame42(frame):
+    frame = frame[:, :184]
+    # Resize by half, then down to 42x42 (essentially mipmapping). If
+    # we resize directly we lose pixels that, when mapped to 42x42,
+    # aren't close enough to the pixel boundary.
+    frame = cv2.resize(frame, (84, 84))
+    frame = frame.astype(np.float32)
+    frame = np.moveaxis(frame, -1, 0)
+   # frame *= (1.0 / 255.0)
+    return frame
+
+class AtariRescale42x42(gym.ObservationWrapper):
+    def __init__(self, env=None):
+        super(AtariRescale42x42, self).__init__(env)
+        self.observation_space = Box(0.0, 1.0, [3, 84, 84])
+
+    def _observation(self, observation):
+        return _process_frame42(observation)
+
+
+class NormalizedEnv(gym.ObservationWrapper):
+    def __init__(self, env=None):
+        super(NormalizedEnv, self).__init__(env)
+        self.state_mean = 0
+        self.state_std = 0
+        self.alpha = 0.9999
+        self.num_steps = 0
+
+    def init_param(self):
+        self.state_mean = 0
+        self.state_std = 0
+        self.alpha = 0.9999
+        self.num_steps = 0
+
+    def _observation(self, observation):
+        self.num_steps += 1
+        self.state_mean = self.state_mean * self.alpha + \
+            observation.mean() * (1 - self.alpha)
+        self.state_std = self.state_std * self.alpha + \
+            observation.std() * (1 - self.alpha)
+
+        unbiased_mean = self.state_mean / (1 - pow(self.alpha, self.num_steps))
+        unbiased_std = self.state_std / (1 - pow(self.alpha, self.num_steps))
+
+        return (observation - unbiased_mean) / (unbiased_std + 1e-8)
