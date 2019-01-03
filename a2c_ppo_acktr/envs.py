@@ -33,7 +33,7 @@ except ImportError:
 
 def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
     def _thunk():
-        env = retro.make(game='RoadFighter-Nes', state='RoadFighter.Level2')
+        env = retro.make(game='RoadFighter-Nes', state='RoadFighter.Level1')
         env.seed(seed + rank)
 
         if log_dir is not None:
