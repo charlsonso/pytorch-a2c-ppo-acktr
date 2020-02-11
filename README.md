@@ -1,3 +1,6 @@
+This version is a fork of a fork. This has been modified to work with NBA JAM for the SNES.
+
+The fork can be found at [here](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail.git)
 # pytorch-a2c-ppo-acktr
 
 ## Please use hyper parameters from this readme. With other hyper parameters things might not work (it's RL after all)!

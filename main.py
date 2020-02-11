@@ -3,14 +3,15 @@ import glob
 import os
 import time
 from collections import deque
-
+import random
 import gym
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
+import matplotlib
+import matplotlib.pyplot as plt
 from a2c_ppo_acktr import algo
 from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.envs import make_vec_envs
@@ -18,7 +19,7 @@ from a2c_ppo_acktr.model import Policy
 from a2c_ppo_acktr.storage import RolloutStorage
 from a2c_ppo_acktr.utils import get_vec_normalize, update_linear_schedule
 from a2c_ppo_acktr.visualize import visdom_plot
-
+from PIL import Image
 
 args = get_args()
 
@@ -117,8 +118,22 @@ def main():
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
-
+            if infos[0]['quarter_clock'] == 0:
+                print(action)
+                exit()
+            if random.random() < 1e-5:
+                print(matplotlib.get_backend())
+                matplotlib.use('MacOSX')
+                img = np.moveaxis(obs[0,-3:,:,:].numpy(),0,-1)
+                plt.imshow(img[:,:,0])
+                plt.show()
+                #print(img.shape)
+                #print(img/255.0)
+                #im = Image.fromarray(img[:,:,0])
+                #im.save('test.jpg')
+                
             for info in infos:
+                print(info)
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
 
@@ -157,7 +172,7 @@ def main():
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
-
+        print(len(episode_rewards))
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
             print("Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
