@@ -33,7 +33,7 @@ except ImportError:
 
 def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
     def _thunk():
-        env = retro.make(game='RoadFighter-Nes', state='RoadFighter.Level1')
+        env = retro.make(game='NbaJamTE-Snes', state='lakers-pacers-peeler-divac')
         env.seed(seed + rank)
 
         if log_dir is not None:
@@ -47,7 +47,7 @@ def make_env(env_id, seed, rank, log_dir, add_timestep, allow_early_resets):
         obs_shape = env.observation_space.shape
         if len(obs_shape) == 3 and obs_shape[2] in [1, 3]:
             env = TransposeImage(env)
-
+        
         return env
 
     return _thunk
@@ -58,7 +58,7 @@ def make_vec_envs(env_name, seed, num_processes, gamma, log_dir, add_timestep,
             for i in range(num_processes)]
 
     if len(envs) > 1:
-        envs = SubprocVecEnv(envs)
+        envs = SubprocVecEnv(envs, context='fork')
     else:
         envs = DummyVecEnv(envs)
 
@@ -182,7 +182,7 @@ class VecPyTorchFrameStack(VecEnvWrapper):
     def step_wait(self):
         obs, rews, news, infos = self.venv.step_wait()
         self.stacked_obs[:, :-self.shape_dim0] = \
-            self.stacked_obs[:, self.shape_dim0:]
+            self.stacked_obs[:, self.shape_dim0:].clone()
         for (i, new) in enumerate(news):
             if new:
                 self.stacked_obs[i] = 0
@@ -214,7 +214,7 @@ class AtariRescale42x42(gym.ObservationWrapper):
         super(AtariRescale42x42, self).__init__(env)
         self.observation_space = Box(0.0, 1.0, [3, 84, 84])
 
-    def _observation(self, observation):
+    def observation(self, observation):
         return _process_frame42(observation)
 
 
@@ -232,7 +232,7 @@ class NormalizedEnv(gym.ObservationWrapper):
         self.alpha = 0.9999
         self.num_steps = 0
 
-    def _observation(self, observation):
+    def observation(self, observation):
         self.num_steps += 1
         self.state_mean = self.state_mean * self.alpha + \
             observation.mean() * (1 - self.alpha)
