@@ -118,22 +118,9 @@ def main():
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
-            if infos[0]['quarter_clock'] == 0:
-                print(action)
-                exit()
-            if random.random() < 1e-5:
-                print(matplotlib.get_backend())
-                matplotlib.use('MacOSX')
-                img = np.moveaxis(obs[0,-3:,:,:].numpy(),0,-1)
-                plt.imshow(img[:,:,0])
-                plt.show()
-                #print(img.shape)
-                #print(img/255.0)
-                #im = Image.fromarray(img[:,:,0])
-                #im.save('test.jpg')
-                
             for info in infos:
-                print(info)
+                if info['quarter_clock'] == 1:
+                    print(info)
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
 
@@ -172,7 +159,6 @@ def main():
             torch.save(save_model, os.path.join(save_path, args.env_name + ".pt"))
 
         total_num_steps = (j + 1) * args.num_processes * args.num_steps
-        print(len(episode_rewards))
         if j % args.log_interval == 0 and len(episode_rewards) > 1:
             end = time.time()
             print("Updates {}, num timesteps {}, FPS {} \n Last {} training episodes: mean/median reward {:.1f}/{:.1f}, min/max reward {:.1f}/{:.1f}\n".
