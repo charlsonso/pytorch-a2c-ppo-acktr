@@ -23,6 +23,8 @@ from PIL import Image
 
 args = get_args()
 
+print(torch.cuda.is_available())
+
 assert args.algo in ['a2c', 'ppo', 'acktr']
 if args.recurrent_policy:
     assert args.algo in ['a2c', 'ppo'], \
@@ -93,10 +95,16 @@ def main():
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=10)
-
+    random_data = []
     start = time.time()
-    for j in range(num_updates):
+    #reward_graph = []
+    #list_data = ['player_2_score', 'player_2_assist', 'team_1_score', 'player_1_score', 'zero_based_quarter', 'player_1_assist', 'team_2_score']
+    #data_graph = []
+    #for x in range(len(list_data)):
+    #    data_graph.append([])
 
+
+    for j in range(num_updates):
         if args.use_linear_lr_decay:
             # decrease learning rate linearly
             if args.algo == "acktr":
@@ -108,6 +116,7 @@ def main():
         if args.algo == 'ppo' and args.use_linear_clip_decay:
             agent.clip_param = args.clip_param  * (1 - j / float(num_updates))
 
+        past_avg_reward = np.NINF
         for step in range(args.num_steps):
             # Sample actions
             with torch.no_grad():
@@ -118,9 +127,27 @@ def main():
 
             # Obser reward and next obs
             obs, reward, done, infos = envs.step(action)
+            
+            #num_it = len(infos)
+            #temp = {}
+            #for x in list_data:
+            #    temp[x] = 0
+            #for info in infos:
+            #    for x in list_data:
+            #        temp[x] += info[x]
+            #        print(x)
+            #        print(info[x])
+            #        print(temp[x])
+            #for x in list_data:
+            #    temp[x] /= num_it
+
+            #for x in range(len(list_data)):
+            #    data_type = list_data[x]
+            #    data_graph[x].append(temp[data_type])
+
             for info in infos:
                 if info['quarter_clock'] == 1:
-                    print(info)
+                    random_data.append(info)
                 if 'episode' in info.keys():
                     episode_rewards.append(info['episode']['r'])
 
@@ -128,7 +155,7 @@ def main():
             masks = torch.FloatTensor([[0.0] if done_ else [1.0]
                                        for done_ in done])
             rollouts.insert(obs, recurrent_hidden_states, action, action_log_prob, value, reward, masks)
-
+        
         with torch.no_grad():
             next_value = actor_critic.get_value(rollouts.obs[-1],
                                                 rollouts.recurrent_hidden_states[-1],
@@ -139,10 +166,12 @@ def main():
         value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
         rollouts.after_update()
-
+        current_avg_reward = np.mean(episode_rewards)
+        
         # save for every interval-th episode or for the last epoch
-        if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "":
+        if (j % args.save_interval == 0 or j == num_updates - 1) and args.save_dir != "" and past_avg_reward < current_avg_reward:
             save_path = os.path.join(args.save_dir, args.algo)
+            past_avg_reward = current_avg_reward
             try:
                 os.makedirs(save_path)
             except OSError:
@@ -217,7 +246,9 @@ def main():
                                   args.algo, args.num_env_steps)
             except IOError:
                 pass
-
+    
+    for i in random_data:
+        print(i)
 
 if __name__ == "__main__":
     main()
